@@ -26,7 +26,7 @@ namespace AgentMind.Api
                 client.BaseAddress = new Uri(baseUrl);
 
                 // Optional: Add a timeout to prevent the API from waiting forever if the Mac is asleep
-                client.Timeout = TimeSpan.FromSeconds(60);
+                client.Timeout = TimeSpan.FromMinutes(5);
             });
 
             var app = builder.Build();
