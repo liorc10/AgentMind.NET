@@ -1,6 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using System.Text;
-using System.Text.Json;
+using AgentMind.Api.Services;
 
 namespace AgentMind.Api.Controllers;
 
@@ -8,88 +7,49 @@ namespace AgentMind.Api.Controllers;
 [Route("api/[controller]")]
 public class ChatController : ControllerBase
 {
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly IConfiguration _config;
-// Injecting the HttpClientFactory to use our pre-configured "OllamaClient"
+    // The service that handles logic and memory markers
+    private readonly OllamaService _ollamaService;
 
-    public ChatController(IHttpClientFactory httpClientFactory, IConfiguration config)
+    // We inject the OllamaService through the constructor
+    public ChatController(OllamaService ollamaService)
     {
-        _httpClientFactory = httpClientFactory;
-        _config = config;
+        _ollamaService = ollamaService;
     }
 
     [HttpPost("ask")]
     public async Task Ask([FromBody] ChatRequest request)
     {
-        // 1. Get the pre-configured client
-        var client = _httpClientFactory.CreateClient("OllamaClient");
+        // Set the response type to plain text for a cleaner stream display
+        Response.ContentType = "text/plain";
 
-        // 2. Prepare the payload with History (Context) and Streaming enabled
-        var requestBody = new
-        {
-            model = _config["OllamaConfig:ModelName"],
-            prompt = request.Prompt,
-            context = request.History, // Passing the memory markers back to the model
-            stream = true             // Enabling real-time streaming
-        };
-
-        var jsonPayload = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+        // HARDCODED identification key to ensure memory works every time
+        // Even if Swagger sends something else, we use this strictly.
+        string sessionId = "default-user";
 
         try
         {
-            // 3. Use SendAsync with ResponseHeadersRead for streaming support
-            using var requestMessage = new HttpRequestMessage(HttpMethod.Post, "api/generate") { Content = content };
-            using var response = await client.SendAsync(requestMessage, HttpCompletionOption.ResponseHeadersRead);
-
-            if (response.IsSuccessStatusCode)
+            // Consuming the asynchronous stream from the service
+            // We explicitly pass the "default-user" string here
+            await foreach (var word in _ollamaService.StreamChatAsync(request.Prompt, sessionId, HttpContext.RequestAborted))
             {
-                // Set the correct content type for the stream
-                Response.ContentType = "application/json";
+                // Writing each chunk directly to the HTTP response stream
+                await Response.WriteAsync(word);
 
-                using var responseStream = await response.Content.ReadAsStreamAsync();
-                using var reader = new StreamReader(responseStream);
-
-                // 4. Read from Ollama and write directly to the client's response body
-                while (!reader.EndOfStream)
-                {
-                    var line = await reader.ReadLineAsync();
-                    if (string.IsNullOrWhiteSpace(line)) continue;
-
-                    // Optional: Log the line to see it in your Output window while debugging
-                    // System.Diagnostics.Debug.WriteLine(line);
-
-
-                    // Write the JSON chunk to the output stream immediately
-                    await Response.WriteAsync(line + "\n");
-                    await Response.Body.FlushAsync(); // Forces the word to appear in the UI/Swagger
-                }
-            }
-            else
-            {
-                Response.StatusCode = (int)response.StatusCode;
+                // Forcing the buffer to flush so the user sees text in real-time
+                await Response.Body.FlushAsync();
             }
         }
         catch (Exception ex)
         {
             Response.StatusCode = 400;
-            await Response.WriteAsync($"Connection failed: {ex.Message}");
+            await Response.WriteAsync($"Error: {ex.Message}");
         }
     }
 
-    // Models used for Request/Response
     public class ChatRequest
     {
         public string Prompt { get; set; }
-        public List<int>? History { get; set; } // The memory markers from Ollama
-    }
-
-    public class OllamaResponse
-    {
-        public string response { get; set; }
-        public List<int> context { get; set; }
-        public long total_duration { get; set; }
-        public int eval_count { get; set; }
-        public bool done { get; set; }
+        // Note: With our new service, we don't strictly need to pass History from Swagger anymore
+        public List<int>? History { get; set; }
     }
 }

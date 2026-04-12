@@ -1,4 +1,6 @@
 
+using AgentMind.Api.Services;
+
 namespace AgentMind.Api
 {
     public class Program
@@ -6,6 +8,8 @@ namespace AgentMind.Api
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+
+            builder.Services.AddSingleton<OllamaService>();
 
             // Add services to the container.
 
@@ -28,6 +32,9 @@ namespace AgentMind.Api
                 // Optional: Add a timeout to prevent the API from waiting forever if the Mac is asleep
                 client.Timeout = TimeSpan.FromMinutes(5);
             });
+
+            builder.Services.AddMemoryCache();
+            builder.Services.AddScoped<OllamaService>();
 
             var app = builder.Build();
 
