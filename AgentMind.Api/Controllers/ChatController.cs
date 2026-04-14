@@ -49,7 +49,7 @@ public class ChatController : ControllerBase
     public class ChatRequest
     {
         public string Prompt { get; set; }
-        // Note: With our new service, we don't strictly need to pass History from Swagger anymore
-        public List<int>? History { get; set; }
+        public List<long>? History { get; set; }
+
     }
 }

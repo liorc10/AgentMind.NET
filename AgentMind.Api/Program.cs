@@ -9,8 +9,6 @@ namespace AgentMind.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            builder.Services.AddSingleton<OllamaService>();
-
             // Add services to the container.
 
             builder.Services.AddControllers();
@@ -34,7 +32,11 @@ namespace AgentMind.Api
             });
 
             builder.Services.AddMemoryCache();
-            builder.Services.AddScoped<OllamaService>();
+
+            // Singleton is required: OllamaService owns _contextStore (per-session memory).
+            // A Scoped lifetime would create a new instance per request, wiping the context array
+            // and causing the model to forget the conversation after every message.
+            builder.Services.AddSingleton<OllamaService>();
 
             var app = builder.Build();
 
