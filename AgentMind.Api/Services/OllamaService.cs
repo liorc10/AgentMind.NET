@@ -1,4 +1,5 @@
-﻿using AgentMind.Api.Models;
+﻿using AgentMind.Api.Interfaces;
+using AgentMind.Api.Models;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
@@ -6,14 +7,35 @@ using System.Text.Json.Serialization;
 
 namespace AgentMind.Api.Services;
 
-public class OllamaService
+/* * OllamaService.cs
+ * 
+ * This service orchestrates all interactions with the Ollama API.
+ * It handles three core phases:
+ * 1. Embeddings Generation
+ * 2. Intent Routing & Persona Assignment
+ * 3. Augmented Streaming Response
+ * 
+ * The service uses strongly-typed models from OllamaModels.cs to ensure
+ * correct serialization and deserialization of API requests/responses.
+ * 
+ * It also includes helper methods like LogPerformance for monitoring.
+ */
+
+
+//the following url is Qdrant Vector DB endpoint
+//http://localhost:6333/dashboard#/collections
+//https://github.com/ollama/ollama/blob/main/docs/api.md
+
+public class OllamaService : IOllamaService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _config;
+    private readonly IVectorService _vectorService;
 
-    public OllamaService(IHttpClientFactory httpClientFactory, IConfiguration config)
+    public OllamaService(IHttpClientFactory httpClientFactory, IConfiguration config, IVectorService vectorService)
     {
         _httpClientFactory = httpClientFactory;
+        _vectorService = vectorService; // Injecting our new Vector Database service
         _config = config;
     }
 

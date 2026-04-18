@@ -1,6 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using AgentMind.Api.Interfaces;
+using AgentMind.Api.Models;
 using AgentMind.Api.Services;
-using AgentMind.Api.Models; 
+using Microsoft.AspNetCore.Mvc;
+using static AgentMind.Api.Constants.AppConstants;
 
 
 namespace AgentMind.Api.Controllers;
@@ -10,12 +12,16 @@ namespace AgentMind.Api.Controllers;
 public class RAGController : ControllerBase
 {
     // The service that handles logic and memory markers
-    private readonly OllamaService _ollamaService;
+    private readonly IOllamaService _ollamaService;
+    private readonly IVectorService _vectorService;
+    private readonly IConfiguration _config;
 
     // We inject the OllamaService through the constructor
-    public RAGController(OllamaService ollamaService)
+    public RAGController(IOllamaService ollamaService, IVectorService vectorService, IConfiguration config)
     {
         _ollamaService = ollamaService;
+        _vectorService = vectorService;
+        _config = config;
     }
     /* * This endpoint orchestrates the entire RAG pipeline:
      * 1. Intent Routing & Persona selection.
@@ -31,6 +37,12 @@ public class RAGController : ControllerBase
 
         try
         {
+
+            string collection = _config[ConfigKeys.CollectionName] ?? Defaults.CollectionName;
+            int limit = _config.GetValue<int>(ConfigKeys.SearchLimit, Defaults.SearchLimit);
+
+
+
             // TODO: Fetch available categories from a database or configuration service.
             // This ensures the routing logic remains dynamic and scalable.
             string dynamicCategories = "1: API Development, 2: Infrastructure, 3: Security Operations";
@@ -46,7 +58,16 @@ public class RAGController : ControllerBase
             // PHASE 3: KNOWLEDGE RETRIEVAL 
             // Based on the 'routing.ProjectId' and the 'queryVector', we perform a semantic search.
             // The result is injected as context for the LLM.
-            string knowledgeBaseMatchResults = "Context retrieved from Vector DB for Project " + routing.ProjectId;
+            /* PHASE 3: KNOWLEDGE RETRIEVAL - Using actual Vector DB search */
+            // var queryVector = await _ollamaService.GetEmbeddingsAsync(request.Prompt);
+            var matches = await _vectorService.SearchSimilarAsync(collection, queryVector, limit);
+            // Join the matches into a context string for the LLM
+
+            // Fallback if no matches are found
+            // Convert match results to a formatted string for the LLM context
+            string knowledgeBaseMatchResults = matches.Any()
+                ? string.Join("\n", matches.Select(m => m.Payload["content"].ToString()))
+                : "No specific information found.";
 
             // PHASE 4: AUGMENTED GENERATION - The Final Stream - Consuming the asynchronous stream from the service
             // We call the retrieval augmented method that handles context injection.
@@ -72,4 +93,29 @@ public class RAGController : ControllerBase
             await Response.WriteAsync($"Error processing RAG request: {ex.Message}");
         }
     }
+
+    [HttpPost("ingest")]
+    public async Task<IActionResult> Ingest([FromBody] IngestRequest request)
+    {
+        // Now calling the service via interface
+        var vector = await _ollamaService.GetEmbeddingsAsync(request.Text);
+
+        // 2. Expand the payload with more context
+        var payload = new Dictionary<string, object>
+        {
+            { "content", request.Text },
+            { "source", request.Source },
+            { "ingested_at", DateTime.UtcNow.ToString("o") }, // ISO 8601 format
+            { "file_type", System.IO.Path.GetExtension(request.Source) } // Optional: track file types
+        };
+
+        // Using the confirmed VectorService
+        string collection = _config[ConfigKeys.CollectionName] ?? Defaults.CollectionName;
+
+        await _vectorService.UpsertVectorAsync(collection, Guid.NewGuid(), vector, payload);
+        return Ok("Information ingested successfully.");
+    }
 }
+
+/* This defines a simple data structure for ingestion */
+public record IngestRequest(string Text, string Source);
