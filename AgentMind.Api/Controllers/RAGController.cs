@@ -42,7 +42,6 @@ public class RAGController : ControllerBase
             int limit = _config.GetValue<int>(ConfigKeys.SearchLimit, Defaults.SearchLimit);
 
 
-
             // TODO: Fetch available categories from a database or configuration service.
             // This ensures the routing logic remains dynamic and scalable.
             string dynamicCategories = "1: API Development, 2: Infrastructure, 3: Security Operations";

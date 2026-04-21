@@ -20,7 +20,7 @@ public static class AppConstants
     {
         public const string CollectionName = "agentmind_knowledge_base";
         public const int VectorSize = 384;
-        public const int SearchLimit = 20;
+        public const int SearchLimit = 50;
         public const string Extensions = ".cs,.cpp,.java,.py,.md";
     }
     public static class AgentRoles

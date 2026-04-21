@@ -18,7 +18,13 @@ public interface IVectorService
     /* * Searches for the closest vectors using cosine similarity.
      * Uses the REST API: POST /collections/{name}/points/search
      */
-    Task<List<VectorMatch>> SearchSimilarAsync(string collectionName, float[] queryVector, int limit = AppConstants.Defaults.SearchLimit);
+    // SearchSimilarAsync: queryVector + optional limit and optional requested roles filter.
+    // Keep requestedRoles optional (nullable) so callers that don't use role filtering remain compatible.
+    Task<List<VectorMatch>> SearchSimilarAsync(
+        string collectionName,
+        float[] queryVector,
+        int limit = AppConstants.Defaults.SearchLimit,
+        List<string>? requestedRoles = null);
 }
 
 /* Custom DTO to hold search results without external dependencies */
