@@ -54,14 +54,87 @@ public class VectorService : IVectorService
             //Payload = payload // This won't work because Payload is a Dictionary<string, FieldValue> not Dictionary<string, object>
         };
 
-        foreach (var item in payload)
+        // Map payload values to Qdrant Value types using a single helper call for clarity.
+        // This preserves original value types (int/long/double/bool/string) in Qdrant payloads
+        // instead of converting everything to strings.
+        if (payload != null)
         {
-            point.Payload.Add(item.Key, item.Value.ToString());
+            var mapped = ConvertPayloadToQdrantValues(payload);
+            foreach (var kv in mapped)
+            {
+                point.Payload.Add(kv.Key, kv.Value);
+            }
         }
 
         await _client.UpsertAsync(collectionName, new[] { point });
         return true;
     }
+
+    // Convert an entire payload dictionary to Qdrant Value dictionary in a single helper.
+    // This keeps UpsertVectorAsync implementation simple and readable.
+    private static Dictionary<string, Value> ConvertPayloadToQdrantValues(Dictionary<string, object> payload)
+    {
+        var dict = new Dictionary<string, Value>(payload.Count);
+        foreach (var kv in payload)
+        {
+            dict[kv.Key] = ConvertToQdrantValue(kv.Value);
+        }
+        return dict;
+    }
+
+    // Convert a single CLR value to the generated Qdrant Value proto.
+    // This simplified implementation performs direct type checks and assigns the corresponding
+    // generated property. It is explicit, fast, and easier to read compared to the reflection-based approach.
+    private static Value ConvertToQdrantValue(object? value)
+    {
+        var qv = new Value();
+
+        if (value is null)
+            return qv;
+
+        // Direct type checks and assignments preserve native types in Qdrant payloads.
+        if (value is string s)
+        {
+            qv.StringValue = s;
+            return qv;
+        }
+
+        if (value is int i)
+        {
+            qv.IntegerValue = i;
+            return qv;
+        }
+
+        if (value is long l)
+        {
+            qv.IntegerValue = l;
+            return qv;
+        }
+
+        if (value is bool b)
+        {
+            qv.BoolValue = b;
+            return qv;
+        }
+
+        if (value is double d)
+        {
+            qv.DoubleValue = d;
+            return qv;
+        }
+
+        if (value is float f)
+        {
+            qv.DoubleValue = f;
+            return qv;
+        }
+
+        // Fallback: store the string representation if type is not explicitly handled.
+        qv.StringValue = value.ToString() ?? string.Empty;
+        return qv;
+    }
+
+
 
     /// <summary>
     /// Searches and maps Qdrant ScoredPoint to our custom VectorMatch DTO.
