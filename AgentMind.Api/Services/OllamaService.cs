@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using AgentMind.Api.Constants;
 
 namespace AgentMind.Api.Services;
 
@@ -50,7 +51,7 @@ public class OllamaService : IOllamaService
 
         var requestBody = new
         {
-            model = _config["OllamaConfig:EmbeddingModel"] ?? "all-minilm",
+            model = _config[AppConstants.ConfigKeys.EmbeddingModel] ?? "all-minilm",
             prompt = text
         };
 

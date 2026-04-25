@@ -34,8 +34,9 @@ namespace AgentMind.Api
             });
 
             builder.Services.AddMemoryCache();
-            // Registering the Vector Database service
+            // Register Qdrant client wrapper and the Vector Database service
             // Singletons are preferred for gRPC clients to manage connection pooling
+            builder.Services.AddSingleton<IQdrantClientWrapper, QdrantClientWrapper>();
             builder.Services.AddSingleton<IVectorService, VectorService>();
 
             builder.Services.AddScoped<IOllamaService, OllamaService>();

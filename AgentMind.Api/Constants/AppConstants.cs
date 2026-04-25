@@ -13,8 +13,10 @@ public static class AppConstants
         public const string SupportedExtensions = "IngestionConfig:SupportedExtensions";
         public const string LocalPath = "IngestionConfig:LocalKnowledgePath";
         public const string IngestionRoles = "IngestionConfig:Roles";
-        public const string DefaultRole = "IngestionConfig:DefaultRole";
+        public const string EmbeddingModel = "OllamaConfig:EmbeddingModel";
+
     }
+
 
     public static class Defaults
     {
@@ -23,6 +25,17 @@ public static class AppConstants
         public const int SearchLimit = 50;
         public const string Extensions = ".cs,.cpp,.java,.py,.md";
     }
+
+    public static class VectorDbConfig
+    {
+        public const string SimilarityThreshold = "VectorDbConfig:SimilarityThreshold";
+        public const float similarityThresholdValue = 0.7f;
+        public const string Hostname = "VectorDbConfig:Hostname";
+        public const string Port = "VectorDbConfig:Port";
+        public const string port = "VectorDbConfig:port";
+        public const int    portDefault = 6334;
+    }
+
     public static class AgentRoles
     {
         public const string General = "General";
