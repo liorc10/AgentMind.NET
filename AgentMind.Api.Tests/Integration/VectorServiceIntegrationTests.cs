@@ -3,8 +3,7 @@ using AgentMind.Api.Interfaces;
 using AgentMind.Api.Services;
 using Microsoft.Extensions.Configuration;
 using Qdrant.Client.Grpc;
-using System.Collections;
-using Xunit;
+using static AgentMind.Api.Constants.AppConstants;
 
 namespace AgentMind.Api.Tests.Integration;
 
@@ -43,7 +42,7 @@ public class VectorServiceIntegrationTests : IDisposable
         if (_isIntegrationTestEnabled)
         {
             _client = new QdrantClientWrapper(_config);
-            _service = new VectorService(_client, _config);
+            _service = new VectorService(_client, _config, VectorDbConfig.similarityThresholdValue);
             string baseName = _config.GetValue<string>("VectorDbConfig:CollectionName") ?? "test_collection";
             _testCollectionName = $"{baseName}{Guid.NewGuid():N}";
         }
@@ -66,7 +65,7 @@ public class VectorServiceIntegrationTests : IDisposable
         {
             /* ARRANGE: Setup temporary infrastructure */
             // Using 384 dimensions as required by the local 'all-minilm' model
-            int vectorSize = _config.GetValue<int>("VectorDbConfig:VectorSize", 384);
+            int vectorSize = _config.GetValue<int>("VectorDbConfig:VectorSize", AppConstants.Defaults.VectorSize);
 
             await _service.CreateCollectionAsync(_testCollectionName, vectorSize);
 
@@ -128,7 +127,7 @@ public class VectorServiceIntegrationTests : IDisposable
     public async Task UpsertAsync_MultiplePointsWithDiversePayload_ShouldSucceed()
     {
         // 1. Arrange: Define vector size and prepare 5 unique points
-        int vectorSize = _config.GetValue<int>("VectorDbConfig:VectorSize", 384);
+        int vectorSize = _config.GetValue<int>("VectorDbConfig:VectorSize", AppConstants.Defaults.VectorSize);
         var points = new List<PointStruct>();
 
         // Defining descriptive names for the 'name' field
@@ -211,7 +210,7 @@ public class VectorServiceIntegrationTests : IDisposable
     public async Task SearchAsync_WithFilter_ShouldReturnOnlyMatchingPoints()
     {
         // 1. Arrange: Prepare 5 points with incremental indexes
-        int vectorSize = _config.GetValue<int>("VectorDbConfig:VectorSize", 384);
+        int vectorSize = _config.GetValue<int>("VectorDbConfig:VectorSize", AppConstants.Defaults.VectorSize);
         var points = new List<PointStruct>();
 
         for (int i = 0; i < 5; i++)

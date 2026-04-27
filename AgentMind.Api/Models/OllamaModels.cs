@@ -58,18 +58,28 @@ public class OllamaGenerateResponse
 /* * The response structure for the /api/embeddings endpoint.
  * This captures the numerical vector representation of the text.
  */
-public class OllamaEmbeddingResponse
+//public class OllamaEmbeddingResponse
+//{
+//    [JsonPropertyName("embedding")]
+//    public float[] Embedding { get; set; }
+//}
+
+
+/* * Internal model to match the new Ollama /api/embed response structure */
+public class OllamaEmbedResponse
 {
-    [JsonPropertyName("embedding")]
-    public float[] Embedding { get; set; }
+    [JsonPropertyName("embeddings")]
+    public float[][]? Embeddings { get; set; }
 }
 
+
 /* * Logic object used for internal routing decisions.
- * ProjectId helps filter the SQL database.
+ * ProjectName helps filter the SQL database.
  * SystemInstruction sets the AI persona.
  */
 public class RoutingResult
 {
-    public int ProjectId { get; set; }
+    public string ProjectName { get; set; } = string.Empty;
+    [JsonPropertyName("SystemInstruction")]
     public string SystemInstruction { get; set; }
 }

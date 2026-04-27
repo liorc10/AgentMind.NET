@@ -54,7 +54,7 @@ public class SearchMappingTests
                 It.IsAny<float>()))
             .ReturnsAsync(scoredPoints);
 
-        var service = new VectorService(mockClient.Object, configuration);
+        var service = new VectorService(mockClient.Object, configuration, VectorDbConfig.similarityThresholdValue);
         var results = await service.SearchSimilarAsync("test_collection", new float[] { 0.1f, 0.2f }, 10);
 
         Assert.Single(results);
@@ -102,7 +102,8 @@ public class SearchMappingTests
 
         mockClient.Verify(c => c.SearchAsync(
             "test_collection",
-            It.IsAny<float[]>(),
+            //It.IsAny<float[]>(),
+            It.Is<float[]>(v => v != null && v.SequenceEqual(new float[] { 0.1f })),
             It.Is<Filter>(f => f != null && f.Should.Count == 2),
             10,
             expectedThreshold), Times.Once);
@@ -152,7 +153,7 @@ public class SearchMappingTests
             ))
             .ReturnsAsync(new List<ScoredPoint>());
 
-        var service = new VectorService(mockClient.Object, configuration);
+        var service = new VectorService(mockClient.Object, configuration, VectorDbConfig.similarityThresholdValue);
 
         // ACT
         // Calling with the exact same values defined above
@@ -191,7 +192,7 @@ public class SearchMappingTests
                 It.IsAny<float>()))
             .ReturnsAsync(new List<ScoredPoint>());
 
-        var service = new VectorService(mockClient.Object, configuration);
+        var service = new VectorService(mockClient.Object, configuration, VectorDbConfig.similarityThresholdValue);
         var results = await service.SearchSimilarAsync("test_collection", new float[] { 0.1f }, 10);
 
         Assert.Empty(results);

@@ -12,4 +12,6 @@ public interface IQdrantClientWrapper
 
     // Optionally: delete collection for integration tests
     Task DeleteCollectionAsync(string collectionName);
+
+    Task<IEnumerable<string>> ListCollectionsAsync();
 }

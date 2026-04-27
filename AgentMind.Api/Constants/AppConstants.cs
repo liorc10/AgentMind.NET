@@ -17,6 +17,13 @@ public static class AppConstants
 
     }
 
+    public static class AvailableDatasetCategories
+    {
+        public const string DynamicCategories =
+        "API Development, Infrastructure, Security Operations, Science & Space, " +
+        "Culinary Arts, Finance & Economy, Health & Fitness, Artificial Intelligence";
+    }
+
 
     public static class Defaults
     {

@@ -22,15 +22,25 @@ namespace AgentMind.Api
             // Using a named client "OllamaClient" allows us to reuse this configuration across the app
             builder.Services.AddHttpClient("OllamaClient", client =>
             {
-                // Retrieve the Mac's IP address from appsettings.json
                 var baseUrl = builder.Configuration["OllamaConfig:BaseUrl"];
-
-                // Set the base destination for all requests made by this client
-                // Note: If baseUrl is null or malformed, this will throw an exception on startup
                 client.BaseAddress = new Uri(baseUrl);
 
-                // Optional: Add a timeout to prevent the API from waiting forever if the Mac is asleep
+                // Technical English Comment: High timeout to account for model loading on the remote Mac.
                 client.Timeout = TimeSpan.FromMinutes(5);
+
+                // Technical English Comment: Explicitly request to keep the TCP connection alive.
+                client.DefaultRequestHeaders.ConnectionClose = false;
+                client.DefaultRequestHeaders.Add("Connection", "keep-alive");
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                // Technical English Comment: Pooling and Keep-Alive settings at the socket level.
+                // This ensures that the connection to the Mac (10.100.102.3) isn't dropped by idle timeouts.
+                PooledConnectionLifetime = TimeSpan.FromMinutes(15),
+                PooledConnectionIdleTimeout = TimeSpan.FromMinutes(5),
+                KeepAlivePingDelay = TimeSpan.FromSeconds(30),
+                KeepAlivePingTimeout = TimeSpan.FromSeconds(10),
+                EnableMultipleHttp2Connections = true
             });
 
             builder.Services.AddMemoryCache();
@@ -55,27 +65,27 @@ namespace AgentMind.Api
              * Using a Scope to retrieve services during startup.
              * This ensures the Vector DB is ready before the API accepts requests.
              */
-            using (var scope = app.Services.CreateScope())
-            {
-                var vectorService = scope.ServiceProvider.GetRequiredService<IVectorService>();
+            //using (var scope = app.Services.CreateScope())
+            //{
+            //    var vectorService = scope.ServiceProvider.GetRequiredService<IVectorService>();
 
-                // Fetching from appsettings with safe fallbacks
-                string collectionName = builder.Configuration[AppConstants.ConfigKeys.CollectionName]
-                                        ?? AppConstants.Defaults.CollectionName;
+            //    // Fetching from appsettings with safe fallbacks
+            //    string collectionName = builder.Configuration[AppConstants.ConfigKeys.CollectionName]
+            //                            ?? AppConstants.Defaults.CollectionName;
 
-                /* * CRITICAL CONFIGURATION NOTE:
-                 * 384 is the vector dimension for the 'all-minilm' embedding model.
-                 * IMPORTANT: While models like 'mxbai-embed-large' use 1024 dimensions, 
-                 * using 1024 here will cause a CRASH because the local Ollama model 
-                 * we are currently using is not configured for that size. 
-                 * Always ensure this number matches your active embedding model.
-                 */
-                int vectorSize = builder.Configuration.GetValue<int>(
-                    AppConstants.ConfigKeys.VectorSize,
-                    AppConstants.Defaults.VectorSize);
+            //    ///* * CRITICAL CONFIGURATION NOTE:
+            //    // * 384 is the vector dimension for the 'all-minilm' embedding model.
+            //    // * IMPORTANT: While models like 'mxbai-embed-large' use 1024 dimensions, 
+            //    // * using 1024 here will cause a CRASH because the local Ollama model 
+            //    // * we are currently using is not configured for that size. 
+            //    // * Always ensure this number matches your active embedding model.
+            //    // */
+            //    int vectorSize = builder.Configuration.GetValue<int>(
+            //        AppConstants.ConfigKeys.VectorSize,
+            //        AppConstants.Defaults.VectorSize);
 
-                await vectorService.CreateCollectionAsync(collectionName, vectorSize);
-            }
+            //    await vectorService.CreateCollectionAsync(collectionName, vectorSize);
+            //}
 
             // Configure the HTTP request pipeline.
             if (app.Environment.IsDevelopment())

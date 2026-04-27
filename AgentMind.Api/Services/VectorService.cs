@@ -11,14 +11,18 @@ public class VectorService : IVectorService
     private readonly IConfiguration _config;
     private readonly float _similarityThreshold;
 
-    public VectorService(IQdrantClientWrapper client, IConfiguration config)
+    public VectorService(IQdrantClientWrapper client, IConfiguration config, float? similarityThreshold = null)
     {
         _client = client;
         _config = config;
 
         var SimilarityThresholdSection = _config[VectorDbConfig.SimilarityThreshold];
-        _similarityThreshold = (float.TryParse(SimilarityThresholdSection, out var SimilarityThresholdResult) ? SimilarityThresholdResult : (float?)null)
-                               ?? VectorDbConfig.similarityThresholdValue;
+
+        // The ?? (null-coalescing) operator avoids the 'if' block.
+        // It checks: was similarityThreshold provided? 
+        // If not, go to Config. If not in Config, use 0.7f.
+        _similarityThreshold = similarityThreshold ??
+                     _config.GetValue<float>(VectorDbConfig.SimilarityThreshold, VectorDbConfig.similarityThresholdValue);
     }
 
     public async Task<bool> CreateCollectionAsync(string collectionName, int vectorSize)
@@ -41,6 +45,15 @@ public class VectorService : IVectorService
             Id = id,
             Vectors = vector
         };
+        var existingCollections = await _client.ListCollectionsAsync();
+
+        if (!existingCollections.Contains(collectionName))
+        {
+            // Automatically create the collection if it is missing. 
+            // Using 384 dimensions to match the all-minilm embedding model.
+            int vectorSize = _config.GetValue<int>("VectorDbConfig:VectorSize", Defaults.VectorSize);
+            await CreateCollectionAsync(collectionName, vectorSize);
+        }
 
         if (payload != null)
         {
@@ -50,8 +63,14 @@ public class VectorService : IVectorService
                 point.Payload.Add(kv.Key, kv.Value);
             }
         }
-
-        await _client.UpsertAsync(collectionName, new[] { point });
+        try
+        {
+            await _client.UpsertAsync(collectionName, new[] { point });
+        }
+        catch (Exception ex) {
+            Console.WriteLine($"Error upserting vector: {ex.Message}");
+            throw;
+        }
         return true;
     }
 
@@ -64,67 +83,6 @@ public class VectorService : IVectorService
         }
         return dict;
     }
-
-    internal static Value ConvertToQdrantValue(object? value)
-    {
-        var qv = new Value();
-
-        if (value is null)
-            return qv;
-
-        if (value is DateTime dt)
-        {
-            qv.IntegerValue = new DateTimeOffset(dt).ToUnixTimeSeconds();
-            return qv;
-        }
-
-        if (value is DateTimeOffset dto)
-        {
-            qv.IntegerValue = dto.ToUnixTimeSeconds();
-            return qv;
-        }
-
-        if (value is string s)
-        {
-            qv.StringValue = s;
-            return qv;
-        }
-
-        if (value is int i)
-        {
-            qv.IntegerValue = i;
-            return qv;
-        }
-
-        if (value is long l)
-        {
-            qv.IntegerValue = l;
-            return qv;
-        }
-
-        if (value is bool b)
-        {
-            qv.BoolValue = b;
-            return qv;
-        }
-
-        if (value is double d)
-        {
-            qv.DoubleValue = d;
-            return qv;
-        }
-
-        if (value is float f)
-        {
-            qv.DoubleValue = f;
-            return qv;
-        }
-
-        qv.StringValue = value.ToString() ?? string.Empty;
-        return qv;
-    }
-
-
 
     public async Task<List<VectorMatch>> SearchSimilarAsync(string collectionName,
      float[] queryVector,
@@ -189,5 +147,63 @@ public class VectorService : IVectorService
             Value.KindOneofCase.BoolValue => value.BoolValue,
             _ => string.Empty
         };
+    }
+    internal static Value ConvertToQdrantValue(object? value)
+    {
+        var qv = new Value();
+
+        if (value is null)
+            return qv;
+
+        if (value is DateTime dt)
+        {
+            qv.IntegerValue = new DateTimeOffset(dt).ToUnixTimeSeconds();
+            return qv;
+        }
+
+        if (value is DateTimeOffset dto)
+        {
+            qv.IntegerValue = dto.ToUnixTimeSeconds();
+            return qv;
+        }
+
+        if (value is string s)
+        {
+            qv.StringValue = s;
+            return qv;
+        }
+
+        if (value is int i)
+        {
+            qv.IntegerValue = i;
+            return qv;
+        }
+
+        if (value is long l)
+        {
+            qv.IntegerValue = l;
+            return qv;
+        }
+
+        if (value is bool b)
+        {
+            qv.BoolValue = b;
+            return qv;
+        }
+
+        if (value is double d)
+        {
+            qv.DoubleValue = d;
+            return qv;
+        }
+
+        if (value is float f)
+        {
+            qv.DoubleValue = f;
+            return qv;
+        }
+
+        qv.StringValue = value.ToString() ?? string.Empty;
+        return qv;
     }
 }

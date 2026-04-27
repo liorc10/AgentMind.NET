@@ -3,6 +3,7 @@ using Qdrant.Client;
 using Qdrant.Client.Grpc;
 using static AgentMind.Api.Constants.AppConstants;
 
+
 namespace AgentMind.Api.Services;
 
 public class QdrantClientWrapper : IQdrantClientWrapper
@@ -35,5 +36,11 @@ public class QdrantClientWrapper : IQdrantClientWrapper
     public Task DeleteCollectionAsync(string collectionName)
     {
         return _client.DeleteCollectionAsync(collectionName);
+    }
+    public async Task<IEnumerable<string>> ListCollectionsAsync()
+    {
+        // Technical English Comment: In newer SDK versions, ListCollectionsAsync returns the collection list directly.
+        var collections = await _client.ListCollectionsAsync();
+        return collections;
     }
 }

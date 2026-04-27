@@ -1,10 +1,10 @@
-﻿using AgentMind.Api.Interfaces;
+﻿using AgentMind.Api.Constants;
+using AgentMind.Api.Interfaces;
 using AgentMind.Api.Models;
 using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using AgentMind.Api.Constants;
 
 namespace AgentMind.Api.Services;
 
@@ -49,54 +49,115 @@ public class OllamaService : IOllamaService
     {
         var client = _httpClientFactory.CreateClient("OllamaClient");
 
+        // Fix 1: Use 'input' instead of 'prompt' for the /api/embed endpoint
         var requestBody = new
         {
             model = _config[AppConstants.ConfigKeys.EmbeddingModel] ?? "all-minilm",
-            prompt = text
+            input = text
         };
 
-        // PostAsJsonAsync handles the serialization of the request body
-        var response = await client.PostAsJsonAsync("api/embeddings", requestBody, ct);
-        response.EnsureSuccessStatusCode();
+        try
+        {
+            // PostAsJsonAsync handles the serialization of the request bod
+            var response = await client.PostAsJsonAsync("api/embed", requestBody, ct);
+            response.EnsureSuccessStatusCode();
+            // Deserializing into the model we created in OllamaModels.cs
+            var result = await response.Content.ReadFromJsonAsync<OllamaEmbedResponse>(ct);
 
-        // Deserializing into the model we created in OllamaModels.cs
-        var result = await response.Content.ReadFromJsonAsync<OllamaEmbeddingResponse>(ct);
-        return result?.Embedding ?? Array.Empty<float>();
+            /* * * The /api/embed API returns an array of vectors (embeddings).
+            * Since we send a single string input, we take the first vector from the array.
+            */
+            if (result?.Embeddings != null && result.Embeddings.Length > 0)
+            {
+                return result.Embeddings[0];
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error generating embeddings: {ex.Message}");
+        }
+        return Array.Empty<float>();
     }
 
     // --- PHASE 2: INTENT ROUTING & PERSONA ---
     /* * Uses the LLM to analyze the user's query and decide the context.
-     * It returns a ProjectId for Vector DB filtering and a System Instruction.
+     * It returns a ProjectName for Vector DB filtering and a System Instruction.
      * We force JSON output to ensure the C# code can parse the decision.
      */
     public async Task<RoutingResult> GetRoutingInfoAsync(string userQuery, string categoriesList, CancellationToken ct = default)
     {
-        var client = _httpClientFactory.CreateClient("OllamaClient");
+        // Validation
+        //If the input is empty, we must not proceed. 
+        // Returning a default ID would be misleading; an exception ensures the flow is halted.
+        if (string.IsNullOrWhiteSpace(userQuery))
+        {
+            throw new ArgumentException("Cannot route an empty or null context.");
+        }
 
-        string routingPrompt = $@"
-            Analyze the following user query: '{userQuery}'
-            Available Categories/Projects: {categoriesList}
-            Your task:
-            1. Identify the most relevant ProjectId.
-            2. Write a one-sentence 'System' persona instruction for this context.
-            Return ONLY a valid JSON object: {{ ""ProjectId"": int, ""SystemInstruction"": ""string"" }}";
+        var client = _httpClientFactory.CreateClient("OllamaClient");
+        //Generate the expected JSON structure dynamically from the RoutingResult class.
+        string dynamicSchema = GetDynamicJsonSchema<RoutingResult>();
+
+
+
+        //  We use an explicit instruction 'STRICTLY use one of the following slugs' 
+        // to prevent the model from returning pretty-printed names like 'Science & Space'.
+        string routingPrompt = ("SystemInstruction: You are a strict router. Map the user query to the exact string from the list. " +
+                               $"Query: '{userQuery.Trim()}' " +
+                               $"Available Categories: [{categoriesList.Trim()}]. " +
+                               "Rules: 1. ProjectName MUST be the EXACT verbatim string from the list (no changes, no unicode escaping). " +
+                               "2. If no match is found, output 'General Category'. " +
+                               "3. SystemInstruction: Write a short 'You are an expert in...' style persona. " +
+                               $"Constraint: Return ONLY JSON matching: {dynamicSchema.Trim()}").Trim();
+
+
+        //string routingPrompt = ($"Analyze the query: '{userQuery.Trim()}' " +
+        //                       $"Available Project Slugs: {categoriesList.Trim()}. " +
+        //                       "Task: 1. Identify the most relevant slug. You MUST return the exact string from the list. " +
+        //                       "2. Write a one-sentence 'System' persona instruction. " +
+        //                       "Return ONLY a valid JSON object matching this structure: " + dynamicSchema.Trim()).Trim();
 
         var requestBody = new
         {
             model = _config["OllamaConfig:ModelName"],
             prompt = routingPrompt,
             format = "json",
-            stream = false
+            // Technical Note: 'raw = true' and 'stream = false' are used here to ensure deterministic JSON output 
+            // and to prevent Ollama from injecting automatic BOS (Beginning Of Sentence) tokens. 
+            // This is critical for maintaining vector embedding consistency with the database (Qdrant) 
+            // and avoiding parsing exceptions caused by conversational preambles or streaming chunks.
+            stream = false, // get full response at once
+            raw = true // <--- Mandatory to fix the BOS issue
         };
 
-        var response = await client.PostAsJsonAsync("api/generate", requestBody, ct);
-        response.EnsureSuccessStatusCode();
+        try
+        {
+            var response = await client.PostAsJsonAsync("api/generate", requestBody, ct);
+            response.EnsureSuccessStatusCode();
 
-        var jsonString = await response.Content.ReadAsStringAsync(ct);
+            var jsonString = await response.Content.ReadAsStringAsync(ct);
 
-        // Case-insensitive deserialization to handle potential LLM casing issues
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        return JsonSerializer.Deserialize<RoutingResult>(jsonString, options);
+            // Case-insensitive deserialization to handle potential LLM casing issues
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+            // The /api/generate endpoint wraps the model output inside the "response" field
+            // of the OllamaGenerateResponse envelope. We must extract that inner JSON string
+            // before deserializing it into our RoutingResult model.
+            var envelope = JsonSerializer.Deserialize<OllamaGenerateResponse>(jsonString, options);
+            if (envelope == null || string.IsNullOrEmpty(envelope.Response))
+            {
+                throw new Exception("Empty response from Ollama.");
+            }
+            // Technical English Comment: Final deserialization of the inner AI response into the RoutingResult object.
+            return JsonSerializer.Deserialize<RoutingResult>(envelope!.Response, options)!;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in GetRoutingInfoAsync: {ex.Message}");
+            // Consider logging the full JSON string for debugging
+            // Console.WriteLine($"Full JSON received: {jsonString}");
+            throw;
+        }
     }
 
     // --- PHASE 3: AUGMENTED STREAMING ---
@@ -218,6 +279,12 @@ public class OllamaService : IOllamaService
             Console.WriteLine($"Throughput: {tokensPerSecond} tokens/sec");
             Console.WriteLine("-----------------------------------------\n");
         }
+    }
+    private string GetDynamicJsonSchema<T>()
+    {
+        var properties = typeof(T).GetProperties()
+            .Select(p => $"\"{p.Name}\": \"{p.PropertyType.Name.ToLower()}\"");
+        return "{{ " + string.Join(", ", properties) + " }}";
     }
 
 }
